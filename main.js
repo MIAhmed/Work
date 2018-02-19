@@ -6,7 +6,7 @@ var WebSocket = require("ws");
 
 var http_port = process.env.HTTP_PORT || 6900;
 var p2p_port = process.env.P2P_PORT || 6700;
-var initialPeers = process.env.PEERS ? process.env.PEERS.split(',') : ["ws://127.0.0.1:6800"];
+var initialPeers = process.env.PEERS ? process.env.PEERS.split(',') : []; //"ws://127.0.0.1:6800"
 
 var sockets = [];
 var MessageType = {
@@ -22,11 +22,27 @@ var MessageType = {
 var startHttpServer = () => {
     var app = express();
     app.use(bodyParser.json());
+    app.use(bodyParser.urlencoded({ extended: true }));
+
+    app.get('/', function (req, res) {
+        res.sendfile('index.html');
+    });
+
+    app.get('/latestBlock', (req, res) => res.send(JSON.stringify(vChain.getLatestBlock())));
+    app.get('/allBlocks', (req, res) => res.send(JSON.stringify(vChain)));
     
-    app.get('/LatestBlock', (req, res) => res.send(JSON.stringify(vChain.getLatestBlock())));
-    app.get('/AllBlocks', (req, res) => res.send(JSON.stringify(vChain)));
+    app.post('/addBlock', (req, res) => {
     
-   
+            
+        vChain.addBlockFromData(new Data(req.body.fromName, req.body.toName, req.body.amount));
+        
+        res.send("Block Added: " + JSON.stringify(vChain.getLatestBlock()));
+    });
+
+    app.post('/addPeer', (req, res) => {
+        wsConnectToPeers([req.body.peer]);
+        res.send("Peer added for connection: " + req.body.peer);
+    });
     app.listen(http_port, () => console.log('Listening HTTP on port: ' + http_port));
 };
 
@@ -35,14 +51,15 @@ var startP2PServer = () => {
     var server = new WebSocket.Server({ port: p2p_port });
     server.on('connection', ws => initalizeConnection(ws));
     console.log('Listening Websocket P2P Port on: ' + p2p_port);
-
+    
 };
 
-var initalizeConnection = (ws) => {
+var initalizeConnection = (ws) => { 
     sockets.push(ws);
     wsMessageHandler(ws);
     wsErrorHandler(ws);
-    wsSendMessage(ws, { 'type': MessageType.CONNECTED });
+    //wsSendMessage(ws, { 'type': MessageType.CONNECTED, 'data': sockets.map(s => s._socket.remoteAddress + ':' + s._socket.remotePort) });
+    wsSendMessage(ws, { 'type': MessageType.CONNECTED, 'data': ws._socket.remoteAddress + ':' + ws._socket.remotePort });
 };
 
 var wsMessageHandler = (ws) => {
@@ -52,10 +69,16 @@ var wsMessageHandler = (ws) => {
         switch (msg.type) {
             case MessageType.GET_LATEST_BLOCK:
                 wsSendMessage(ws, { 'type': MessageType.RESPONSE_BLOCK, 'data': JSON.stringify(vChain.getLatestBlock()) });
-            case MessageType.GET_ALL:
+                break;
+            case MessageType.GET_BLOCKCHAIN:
                 wsSendMessage(ws, { 'type': MessageType.RESPONSE_BLOCKCHAIN, 'data': JSON.stringify(vChain) });
+                break;
             case MessageType.ADD_BLOCK:
-                
+                break;
+            case MessageType.BLOCK_ADDED:
+                vChain.addBlockExt(msg.data);
+                break;
+
 
         }
 
@@ -82,9 +105,10 @@ var wsConnectToPeers = (_Peers) => {
     });
 };
 
+
 //var queryChainLengthMsg = () => ({ 'type': MessageType.QUERY_LATEST });
 var wsSendMessage = (ws, message) => ws.send(JSON.stringify(message));
-var broadcast = (message) => sockets.forEach(socket => wsSendMsg(socket, message));
+var broadcast = (message) => sockets.forEach(socket => wsSendMessage(socket, message));
 
 
 const SHA256 = require("crypto-js/sha256");
@@ -98,15 +122,15 @@ var hndlBlockchainResponse = (message) => {
 
 
 class Block {
-    constructor(_index, _timestamp, _data, _prevHash = '') {
+    constructor(_index, _timestamp, _data, _prevHash = '', _nonce = 0 ) {
         this.index = _index;
         this.prevHash = _prevHash;
         this.timestamp = _timestamp;
         this.Data = _data;
         this.hash = this.calculateHash();
-        this.nonce = 0;
+        this.nonce = _nonce;
     }
-
+   
     calculateHash() {
         return SHA256(this.index + this.prevHash + this.timestamp + JSON.stringify(this.data) + this.nonce).toString();
     }
@@ -131,12 +155,14 @@ class Data {
 class Blockchain {
 
     constructor() {
-        this.chain = [this.createGenesisBlock()];
         this.difficulty = 4;
+        this.chain = [this.createGenesisBlock()];
     }
 
     createGenesisBlock() {
-        return new Block(0, "02/01/2017", new Data());
+        var _newBlock = new Block(0, "02/01/2017", new Data());
+        //_newBlock.mineBlock(this.difficulty);
+        return _newBlock;
     }
 
     getLatestBlock() {
@@ -144,11 +170,33 @@ class Blockchain {
     }
 
     addBlock(_newBlock) {
+        _newBlock.index = parseInt(this.getLatestBlock().index) + 1; 
         _newBlock.prevHash = this.getLatestBlock().hash;
         _newBlock.mineBlock(this.difficulty);
         this.chain.push(_newBlock);
     }
+
+    
+    addBlockExt(_newBlock) {
+        //_newBlock.index = parseInt(this.this.getLatestBlock().index) + 1;
+        //_newBlock.prevHash = this.getLatestBlock().hash;
+        //_newBlock.mineBlock(this.difficulty);
+
+        this.chain.push(_newBlock);
+        console.log("block added from peer with index: " + _newBlock.index);
+    }
+    addBlockFromData(_data) {
+
+        var _newBlock = new Block(parseInt(this.getLatestBlock().index) + 1, new Date().toUTCString(), _data, this.getLatestBlock().hash );
+        _newBlock.mineBlock(this.difficulty);
+        this.chain.push(_newBlock);
+        broadcast({ 'type': MessageType.BLOCK_ADDED, 'data': _newBlock });
+        
+    }
+    
 }
+
+
 
 const fs = require('fs');
 

@@ -1,0 +1,48 @@
+﻿<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title></title>
+    <style type="text/css">
+        label {display: block; width: 100px; padding:10px 0px 2px 0px}
+        input[type=text]{ width : 200px;}
+        input[type=submit]{ width : 70px;}
+    </style>
+</head>
+<body>
+    
+    <div style="padding:20px 0px 20px 20px">
+        <h3>Add Block</h3>
+        <form action="/addBlock/" method="post">
+            
+            <label for="fromName">From Name </label>
+            <input id="fromName" type="text" name="fromName" value="">
+            
+            <label for="toName">To Name </label>
+            <input id="toName" type="text" name="toName" value="">
+            
+            <label for="amount">Amount</label>
+            <input id="amount" type="text" name="amount" value="">
+            
+            <input type="submit" value="Add">
+        </form>
+    </div>
+    <hr />
+    <div style="padding:20px 0px 20px 20px">
+        <h3>Connect to Peer</h3>
+        <form action="/addPeer/" method="post">
+
+            <label for="peer">Peer Address</label>
+            <input id="peer" type="text" name="peer" value="">
+
+            <!--<label for="port">Port</label>
+            <input id="port" type="text" name="port" value="">-->
+
+            <input type="submit" value="Connect">
+        </form>
+    </div>
+
+
+</body>
+</html>
